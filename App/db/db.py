@@ -68,11 +68,13 @@ class Database:
 
     def get_all_users(self):
         return self.fetch_query("SELECT * FROM Users")
-
-    def insert_user(self, name, description, image):
-        ...
-
-    def delete_user(self, id):
-        ...
-
-
+        
+    def insert_user(self, name:str, description:str, image:bytes):
+        query = "INSERT INTO Users (name, description, face_image) VALUES (?, ?, ?)"
+        params = (name, description, image)
+        self.execute_query(query, params)
+    
+    def delete_user(self, user_id:int):
+        query = "DELETE FROM Users WHERE id = ?"
+        params = (user_id,)
+        self.execute_query(query, params)
