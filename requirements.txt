@@ -9,6 +9,8 @@ itsdangerous==2.2.0
 Jinja2==3.1.4
 litecli==1.12.3
 MarkupSafe==2.1.5
+numpy==2.1.2
+opencv-python==4.10.0.84
 prompt_toolkit==3.0.48
 Pygments==2.18.0
 sqlparse==0.5.1
