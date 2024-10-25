@@ -1,10 +1,11 @@
 import os
+import base64
 from datetime import datetime
 
-from App.models import face_detector
 
 from ..db.db import Database 
 from ..models.face_detector import FaceDetector
+from ..models.face_recognition import Facenet512Encoder
 
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
@@ -15,6 +16,7 @@ CORS(app)
 
 db = Database(os.path.join('db', 'database'))
 detector = FaceDetector()
+encoder = Facenet512Encoder()
 
 # Health check endpoint
 @app.route("/health")
@@ -51,13 +53,16 @@ def insert_user():
         faces = detector.get_faces(image_blob)
         if len(faces) == 0:
             return {"error": "No faces detected, please ensure that the image is clear and the face is not hidden."}, 401
-        print(faces)
 
         if len(faces) > 1:
             return {"error": "More than one face detected. Please ensure that only one face is present in the image"}, 402
 
         image_with_face_highlighted = detector.get_image_with_face_circled(image_blob)
-        db.insert_user(name, description, image_with_face_highlighted)
+
+        base64_image = f"data:image/jpeg;base64,{base64.b64encode(image_blob).decode('utf-8')}"
+        embedding = encoder.encode(base64_image)
+        
+        db.insert_user(name, description, image_with_face_highlighted, embedding)
         
         return {'message':f"User {name} added successfully"}, 201
     except Exception as e:

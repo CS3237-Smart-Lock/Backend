@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS Users (
     name TEXT NOT NULL,
     description TEXT,
     face_image BLOB, -- the image that the user uploaded, with face circled
-    -- face_embedding TEXT -- an image embedding of the face ONLY, store as JSON (TEXT)
+    embedding TEXT-- an image embedding of the face, store as text separated by comma
 );
 
 -- Create Attempts Table

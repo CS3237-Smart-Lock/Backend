@@ -26,6 +26,8 @@ class Database:
             raise DatabaseError(f"Failed to connect to database: {e}")
 
     def execute_query(self, query: str, params: tuple[Any, ...] | None = None) -> None:
+        print(f"executing query {query}, params {params}")
+
         conn = self._connect()
         cursor = conn.cursor()
         try:
@@ -53,9 +55,10 @@ class Database:
     def get_all_users(self):
         return self.fetch_query("SELECT * FROM Users")
         
-    def insert_user(self, name: str, description: str, image: bytes):
-        query = "INSERT INTO Users (name, description, face_image) VALUES (?, ?, ?)"
-        params = (name, description, image)
+    def insert_user(self, name: str, description: str, image: bytes, embedding:list[float]):
+        embedding_str = ",".join([str(x) for x in embedding])
+        query = "INSERT INTO Users (name, description, face_image, embedding) VALUES (?, ?, ?, ?)"
+        params = (name, description, image, embedding_str)
         self.execute_query(query, params)
     
     def delete_user(self, user_id: int):
@@ -92,9 +95,6 @@ class Database:
             query += " AND DATE(timestamp) BETWEEN ? AND ?"
             params = (start_date, end_date)
         
-        
-        print(f"executing query {query}, params {params}")
 
         res = [dict (row) for row in self.fetch_query(query, params)]
-        print(res)
         return res 
