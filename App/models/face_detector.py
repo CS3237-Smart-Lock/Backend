@@ -5,7 +5,7 @@ class FaceDetector:
     def __init__(self):
         ...
 
-    def get_image_with_face_circled(self, image_blob):
+    def get_image_with_face_circled(self, image_blob:bytes):
         nparr = np.frombuffer(image_blob, np.uint8)
 
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -27,11 +27,9 @@ class FaceDetector:
             raise Exception("Image encoding failed")
 
     def get_faces(self, image_blob:bytes):
-        print("getting faces")
         nparr = np.frombuffer(image_blob, np.uint8)
 
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        print("decoded image")
 
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
@@ -41,8 +39,3 @@ class FaceDetector:
         print(faces)
 
         return faces
-
-
-# cv2.imshow('Faces found', image)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()

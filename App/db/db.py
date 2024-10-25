@@ -73,9 +73,19 @@ class Database:
 
     def get_attempts(self, start_date=None, end_date=None):
         if (start_date and not end_date) or (end_date and not start_date):
-            raise DatabaseError("get_attempts: Must supply either no date range or both start date and end date.")
+            raise DatabaseError("get_attempts: Must supply either no date range or both start date and end date")
 
-        query = "SELECT * FROM Attempts WHERE 1=1" 
+        query = """
+            SELECT Attempts.id, 
+                   Attempts.timestamp,
+                   Attempts.status,
+                   Attempts.details,
+                   Users.name as recognized_user
+            FROM Attempts LEFT JOIN Users 
+            ON recognized_user = Users.id 
+            WHERE 1=1
+        """
+
         params = tuple()
 
         if start_date and end_date:
@@ -85,4 +95,6 @@ class Database:
         
         print(f"executing query {query}, params {params}")
 
-        return [dict (row) for row in self.fetch_query(query, params)]
+        res = [dict (row) for row in self.fetch_query(query, params)]
+        print(res)
+        return res 
