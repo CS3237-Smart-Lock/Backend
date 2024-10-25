@@ -3,18 +3,27 @@ import base64
 from datetime import datetime
 
 
+import filetype
 from ..db.db import Database 
 from ..models.face_detector import FaceDetector
 from ..models.face_recognition import Facenet512Encoder
+from ..lock.lock_controller import LockController
 
+import dotenv
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
-import filetype
+
+config = dotenv.dotenv_values(".env")
+if not config["LOCK_CONTROLLER_IP"]:
+    raise Exception("No lock controller IP found, please specify it in .evn")
 
 app = Flask(__name__)
 CORS(app)
 
+
 db = Database(os.path.join('db', 'database'))
+lock = LockController(config["LOCK_CONTROLLER_IP"])
+
 detector = FaceDetector(scale_factor=1.1)
 encoder = Facenet512Encoder()
 
@@ -116,6 +125,18 @@ def attempts():
     logs = db.get_attempts(start_date, end_date)
 
     return jsonify(logs)
+
+@app.route("/unlock_door", methods=['GET'])
+def unlock_door():
+    print("unlocking door")
+    status = lock.unlock_door()
+    return {}, status
+
+@app.route("/lock_door", methods=['GET'])
+def lock_door():
+    print("locking_door")
+    status = lock.lock_door()
+    return {}, status
 
 if __name__ == "__main__":
     app.run(debug=True)

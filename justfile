@@ -7,7 +7,7 @@ run args:
   ./venv/bin/python3 {{args}}
 
 serve args="":
-  ./venv/bin/python3 -m flask --app App.server.server run {{args}}
+  ./venv/bin/python3 -m flask --app App.server.server run {{args}} --host=0.0.0.0 --port=8080
 
 install-all:
   ./venv/bin/pip install -r requirements.txt
