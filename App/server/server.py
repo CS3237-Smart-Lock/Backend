@@ -15,7 +15,7 @@ app = Flask(__name__)
 CORS(app)
 
 db = Database(os.path.join('db', 'database'))
-detector = FaceDetector()
+detector = FaceDetector(scale_factor=1.1)
 encoder = Facenet512Encoder()
 
 # Health check endpoint
