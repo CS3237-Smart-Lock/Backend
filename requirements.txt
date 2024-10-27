@@ -68,6 +68,7 @@ typing_extensions==4.12.2
 tzdata==2024.2
 urllib3==2.2.3
 wcwidth==0.2.13
+websockets==13.1
 Werkzeug==3.0.4
 wheel==0.44.0
 wrapt==1.16.0
