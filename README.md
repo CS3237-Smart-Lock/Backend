@@ -2,8 +2,8 @@ This is the backend repository for the smart lock project for CS3237. This repos
 
 - REST server (Flask)
 - Database (SQLite3)
-- Potentially Websocket to come
-
+- Websocket for two way data transmission, such as video and log streaming
+  
 I use `just` as a script runner, but you can also take a look in the `justfile` and run the commands separately
 First, create a virtual environment and install dependencies
 
