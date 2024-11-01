@@ -1,26 +1,235 @@
-import asyncio
+import numpy as np
 import websockets
 import cv2
-import numpy as np
+
 import base64
-import time
+import json
+import os
+import asyncio
+from datetime import datetime
 
-async def echo(websocket, path):
+from ..db.db import Database
+from ..models.face_detector import FaceDetector
+from ..models.face_recognition import Recognizer, Facenet512Encoder
+from ..tools.embedding import decode_to_vector
+
+face_detector = FaceDetector()
+face_recognizer, encoder = Recognizer(), Facenet512Encoder()
+
+connected_clients: set[websockets.WebSocketServerProtocol] = set()
+
+db = Database(os.path.join("db", "database"))
+
+
+class APIState:
+    def __init__(self):
+        self.attempt_started = False
+        self.face_found = False
+        self.gesture_record = []
+
+    def reset(self) -> None:
+        self.attempt_started = False
+        self.face_found = False
+        self.gesture_record = []
+
+    async def toggle_face_found(self, value, wait=1):
+        await asyncio.sleep(wait)
+        self.face_found = value
+
+
+class AuthenticationState:
+
+    def __init__(self):
+        self.face = False
+        self.gesture = False
+
+    def authenticate(self) -> bool:
+        return self.face is not None and self.gesture == True
+
+    def reset(self) -> None:
+        self.face = False
+        self.gesture = False
+
+    def success(self) -> bool:
+        return self.face and self.gesture
+
+    def get_failures(self) -> list[str]:
+        res = []
+        if not self.face:
+            res.append("face")
+        if not self.gesture:
+            res.append("gesture")
+        return res 
+
+
+async def receive_data(websocket):
+    """Receives base64 encoded image data over websocket, decodes, and returns the image."""
     async for message in websocket:
-        # Decode the base64 message back to image data
-        img_data = base64.b64decode(message)
-        np_arr = np.frombuffer(img_data, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if not message:
+            continue
 
-        # Display the frame
-        if frame is not None:
-            cv2.imshow("Received Video", frame)
-            # Use waitKey to update the frame; 1ms delay is typical for video
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break  # Press 'q' to exit the video display
+        try:
+            message_json = json.loads(message)
+        except json.decoder.JSONDecodeError:
+            continue
 
-    cv2.destroyAllWindows()  # Close the display window when done
+        data_type = message_json["type"]
+        data = base64.b64decode(message_json["data"])
 
-# Set up the WebSocket server
-start_server = websockets.serve(echo, "localhost", 12345)
+        yield data_type, data
 
+
+async def broadcast_to_clients(
+    message: str, sender: websockets.WebSocketServerProtocol
+):
+    disconnected_clients = set()
+    for client in connected_clients:
+        if client == sender:
+            continue
+
+        try:
+            await client.send(message)
+        except websockets.ConnectionClosed:
+            disconnected_clients.add(client)
+
+    # Remove disconnected clients
+    connected_clients.difference_update(disconnected_clients)
+
+
+async def broadcast_log(message: str, sender: websockets.WebSocketServerProtocol):
+    await broadcast_to_clients(
+        json.dumps(
+            {
+                "type": "log",
+                "data": base64.b64encode(
+                    f"[{datetime.now().time()}] {message}".encode()
+                ).decode("utf-8"),
+            }
+        ),
+        sender=sender,
+    )
+
+
+async def handle_image(
+    img_data: bytes, states: APIState, auth_states: AuthenticationState, websocket
+):
+
+    faces = face_detector.get_faces(img_data)
+
+    if len(faces) == 0:
+        processed_img = img_data
+    else:
+        if not states.face_found:
+            states.face_found = True
+
+            await broadcast_log("Found face, running recognition...", sender=websocket)
+
+            base64_image = (
+                f"data:image/jpeg;base64,{base64.b64encode(img_data).decode('utf-8')}"
+            )
+            embedding = encoder.encode(base64_image)
+
+            users = db.get_all_users()
+            for user in users:
+                if face_recognizer.is_same_person(
+                    embedding, decode_to_vector(user["embedding"])
+                ):
+                    await broadcast_log(
+                        f"User recognized: {user["name"]}", sender=websocket
+                    )
+                    auth_states.face = True
+
+            if not auth_states.face:
+                await broadcast_log(
+                    "No user recognized, will retry in 2 seconds.", sender=websocket
+                )
+                asyncio.create_task(states.toggle_face_found(False, wait=2))
+
+        processed_img = face_detector.get_image_with_face_circled(img_data)
+
+    np_arr = np.frombuffer(processed_img, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    _, buffer = cv2.imencode(".jpg", img)
+    img_as_text = base64.b64encode(buffer).decode("utf-8")
+    await broadcast_to_clients(
+        json.dumps({"type": "image", "data": img_as_text}), sender=websocket
+    )
+
+
+async def handle_gesture(gesture_data, states: APIState, auth_states: AuthenticationState, websocket):
+    return
+
+
+async def handle_command(command, states: APIState, auth_states:AuthenticationState, websocket):
+    command = command.decode("utf-8")
+    if command == "start":
+        states.reset()
+
+        states.attempt_started = True
+
+        await broadcast_log(
+            "Unlock attempt started, capturing enabled.", sender=websocket
+        )
+
+    elif command == "end":
+        states.reset()
+
+        await broadcast_log("Unlock attempt ended.", sender=websocket)
+
+        await broadcast_to_clients(
+            json.dumps(
+                {
+                    "type": "command",
+                    "data": base64.b64encode("end".encode()).decode("utf-8"),
+                }
+            ),
+            sender=websocket,
+        )
+
+        if not auth_states.success():
+            await broadcast_log(f"Authentication failed due to timeout, the following criterias were unsucessful: {auth_states.get_failures()}", sender=websocket)
+
+async def connect(websocket, path):
+    """
+    Main handler to receive, process, and broadcast images with face detection.
+
+    It communicates via JSON, with the format below
+
+    ```json
+    {
+        "type":"image" | "gesture" | "command" | "log"
+        "data": base64 encoded data
+    }
+    ```
+
+    A command is decoded into either "start" or "end", it indicates the start and end of a x seconds communication window from the sensors to the server.
+    Images and gestuers and handled by their respective handlers.
+    Logs are not used for the server side, but for clients to view.
+    """
+
+    connected_clients.add(websocket)
+
+    states = APIState()
+    auth_states = AuthenticationState()
+
+    async for data_type, data in receive_data(websocket):
+        if data_type not in ["command", "image", "gesture"]:
+            continue
+
+        if data_type == "command":
+            await handle_command(data, states, auth_states, websocket)
+
+        elif data_type == "image":
+            await handle_image(data, states, auth_states, websocket)
+
+        else:
+            await handle_gesture(data, states, auth_states, websocket)
+
+        if auth_states.success():
+            # unlock door or whatever
+            ...
+
+
+# Start the WebSocket server
+start_server = websockets.serve(connect, "0.0.0.0", 12345)

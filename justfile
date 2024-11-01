@@ -19,3 +19,6 @@ install args:
 
 init-db:
   ./venv/bin/python3 scripts/init_db.py
+
+fmt:
+  black .
