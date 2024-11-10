@@ -7,9 +7,13 @@ class FaceDetector:
         self.scale_facor = scale_factor
 
     def get_image_with_face_circled(self, image_blob: bytes):
+        if not image_blob:
+            return None
+
         nparr = np.frombuffer(image_blob, np.uint8)
 
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
         face_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
@@ -32,6 +36,9 @@ class FaceDetector:
             raise Exception("Image encoding failed")
 
     def get_faces(self, image_blob: bytes):
+        if not image_blob:
+            return []
+
         nparr = np.frombuffer(image_blob, np.uint8)
 
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)

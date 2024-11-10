@@ -1,6 +1,7 @@
 import sqlite3
 import os
-from typing import Any
+import json
+from typing import Any, Literal
 
 
 class DatabaseError(Exception): ...
@@ -30,8 +31,6 @@ class Database:
             raise DatabaseError(f"Failed to connect to database: {e}")
 
     def execute_query(self, query: str, params: tuple[Any, ...] | None = None) -> None:
-        print(f"executing query {query}, params {params}")
-
         conn = self._connect()
         cursor = conn.cursor()
         try:
@@ -61,12 +60,19 @@ class Database:
     def get_all_users(self):
         return self.fetch_query("SELECT * FROM Users")
 
+    def get_user(self, user_id):
+        query = "SELECT * FROM Users WHERE id = ?"
+        params = (user_id,)
+        return self.fetch_query(query, params)
+
     def insert_user(
-        self, name: str, description: str, image: bytes, embedding: list[float]
+        self, name: str, description: str, gestures: list[Literal["left", "right", "up", "down"]], image: bytes, embedding: list[float], 
     ):
         embedding_str = ",".join([str(x) for x in embedding])
-        query = "INSERT INTO Users (name, description, face_image, embedding) VALUES (?, ?, ?, ?)"
-        params = (name, description, image, embedding_str)
+        gestures_str = json.dumps(gestures)
+        
+        query = "INSERT INTO Users (name, description, gestures, face_image, embedding) VALUES (?, ?, ?, ?, ?)"
+        params = (name, description,gestures_str, image, embedding_str)
         self.execute_query(query, params)
 
     def delete_user(self, user_id: int):
@@ -107,3 +113,5 @@ class Database:
 
         res = [dict(row) for row in self.fetch_query(query, params)]
         return res
+
+    # def insert_log(self, message)

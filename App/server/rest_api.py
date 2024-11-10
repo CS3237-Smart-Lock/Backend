@@ -1,4 +1,5 @@
 import os
+import json 
 import base64
 from datetime import datetime
 
@@ -59,6 +60,7 @@ def insert_user():
     try:
         name = request.form["name"]
         description = request.form["description"]
+        gestures = json.loads(request.form["gestures"])
         image_file = request.files["face_image"]
         image_blob = image_file.read()
 
@@ -80,7 +82,7 @@ def insert_user():
         )
         embedding = encoder.encode(base64_image)
 
-        db.insert_user(name, description, image_with_face_highlighted, embedding)
+        db.insert_user(name, description, gestures, image_with_face_highlighted, embedding)
 
         return {"message": f"User {name} added successfully"}, 201
     except Exception as e:

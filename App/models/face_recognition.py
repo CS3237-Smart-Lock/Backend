@@ -16,9 +16,12 @@ class Facenet512Encoder:
         """
         image (str or np.ndarray): The exact path to the image, a numpy array in BGR format, or a base64 encoded image. If the source image contains multiple faces, the result will include information for each detected face.
         """
-        return DeepFace.represent(img_path=image, model_name="Facenet512", max_faces=1)[
-            0
-        ]["embedding"]
+        embeddings = DeepFace.represent(img_path=image, model_name="Facenet512", max_faces=1, enforce_detection=False)
+        if embeddings:
+          return embeddings[0]["embedding"]
+
+        return [0.0] * 512
+
 
 
 class Recognizer:

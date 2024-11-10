@@ -12,9 +12,10 @@ from ..db.db import Database
 from ..models.face_detector import FaceDetector
 from ..models.face_recognition import Recognizer, Facenet512Encoder
 from ..tools.embedding import decode_to_vector
+from ..tools.arrays import is_subarray
 
 face_detector = FaceDetector()
-face_recognizer, encoder = Recognizer(), Facenet512Encoder()
+face_recognizer, encoder = Recognizer(threshold=0.3), Facenet512Encoder()
 
 connected_clients: set[websockets.WebSocketServerProtocol] = set()
 
@@ -25,7 +26,7 @@ class APIState:
     def __init__(self):
         self.attempt_started = False
         self.face_found = False
-        self.gesture_record = []
+        self.gesture_record:list = []
 
     def reset(self) -> None:
         self.attempt_started = False
@@ -40,18 +41,15 @@ class APIState:
 class AuthenticationState:
 
     def __init__(self):
-        self.face = False
+        self.face:str = "" # stores the id of the user found for logging and other purposes 
         self.gesture = False
 
-    def authenticate(self) -> bool:
-        return self.face is not None and self.gesture == True
-
     def reset(self) -> None:
-        self.face = False
+        self.face = ""
         self.gesture = False
 
     def success(self) -> bool:
-        return self.face and self.gesture
+        return bool(self.face) and self.gesture
 
     def get_failures(self) -> list[str]:
         res = []
@@ -113,6 +111,12 @@ async def broadcast_log(message: str, sender: websockets.WebSocketServerProtocol
 async def handle_image(
     img_data: bytes, states: APIState, auth_states: AuthenticationState, websocket
 ):
+    # Check if the image data is corrupt
+    np_arr = np.frombuffer(img_data, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    if img is None:
+        await broadcast_log("Corrupt image data received. Cannot process.", sender=websocket)
+        return  # Exit the function if the image is corrupt
 
     faces = face_detector.get_faces(img_data)
 
@@ -137,7 +141,7 @@ async def handle_image(
                     await broadcast_log(
                         f"User recognized: {user["name"]}", sender=websocket
                     )
-                    auth_states.face = True
+                    auth_states.face = user["id"]
 
             if not auth_states.face:
                 await broadcast_log(
@@ -158,7 +162,17 @@ async def handle_image(
 
 
 async def handle_gesture(gesture_data, states: APIState, auth_states: AuthenticationState, websocket):
-    return
+    states.gesture_record.append(gesture_data)
+    
+    if not auth_states.face:
+        return
+    
+    user_in_frame = db.get_user(auth_states.face)[0]
+    gesture_password = json.loads(user_in_frame["gestures"])
+
+    if is_subarray(states.gesture_record, gesture_password):
+        auth_states.gesture = True
+        
 
 
 async def handle_command(command, states: APIState, auth_states:AuthenticationState, websocket):
@@ -188,7 +202,9 @@ async def handle_command(command, states: APIState, auth_states:AuthenticationSt
         )
 
         if not auth_states.success():
-            await broadcast_log(f"Authentication failed due to timeout, the following criterias were unsucessful: {auth_states.get_failures()}", sender=websocket)
+            failure_description = f"Authentication failed due to timeout, the following criterias were unsucessful: {auth_states.get_failures()}"
+            # TODO : add a log to db
+            await broadcast_log(failure_description, sender=websocket)
 
 async def connect(websocket, path):
     """
@@ -227,8 +243,9 @@ async def connect(websocket, path):
             await handle_gesture(data, states, auth_states, websocket)
 
         if auth_states.success():
-            # unlock door or whatever
-            ...
+            # TODO: unlock door or whatever
+            # TODO: add a log to db
+            await broadcast_log("Authentication success, opening lock.", sender=websocket)
 
 
 # Start the WebSocket server
