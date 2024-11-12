@@ -14,7 +14,6 @@ just install-all
 
 Then start the server with 
 
-``shell
+```shell
 just serve
-``
-
+```
